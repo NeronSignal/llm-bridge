@@ -155,3 +155,29 @@ test('listModels() returns [] when /v1/models 404s', async () => {
   const models = await p.listModels();
   assert.deepEqual(models, []);
 });
+
+test('healthCheck() returns ok=true on 200', async () => {
+  setMock(jsonResponse(200, {
+    choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+  }));
+
+  const p = new OpenaiCompatProvider({
+    id: 'test', base_url: 'https://api.example.com', api_key: 'sk',
+  });
+  const h = await p.healthCheck({ model: 'm1' });
+  assert.equal(h.ok, true);
+  assert.ok(typeof h.latency_ms === 'number');
+});
+
+test('healthCheck() returns ok=false on 401', async () => {
+  setMock(jsonResponse(401, { error: { message: 'no' } }));
+
+  const p = new OpenaiCompatProvider({
+    id: 'test', base_url: 'https://api.example.com', api_key: 'bad',
+    max_attempts: 1,
+  });
+  const h = await p.healthCheck({ model: 'm1' });
+  assert.equal(h.ok, false);
+  assert.equal(h.category, 'auth');
+});
