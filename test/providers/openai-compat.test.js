@@ -1,6 +1,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { OpenaiCompatProvider } from '../../lib/providers/openai-compat.js';
+import { ProviderError } from '../../lib/providers/base.js';
 
 const realFetch = globalThis.fetch;
 let mockResponses = [];
@@ -80,4 +81,50 @@ test('chat() passes through native tool_calls when present', async () => {
   assert.equal(out.native_tool_calls[0].function.name, 'get_weather');
   assert.equal(out.text, '');
   assert.equal(out.finish_reason, 'tool_calls');
+});
+
+test('chat() throws ProviderError(category=auth) on 401', async () => {
+  setMock(jsonResponse(401, { error: { message: 'invalid key' } }));
+
+  const p = new OpenaiCompatProvider({
+    id: 'test', base_url: 'https://api.example.com', api_key: 'sk-bad',
+    max_attempts: 1,
+  });
+  await assert.rejects(
+    () => p.chat({ model: 'm1', messages: [] }),
+    (err) => {
+      assert.ok(err instanceof ProviderError);
+      assert.equal(err.category, 'auth');
+      assert.equal(err.status, 401);
+      return true;
+    }
+  );
+});
+
+test('chat() retries on 502 then succeeds', async () => {
+  setMock(
+    jsonResponse(502, { error: { message: 'bad gateway' } }),
+    jsonResponse(200, {
+      choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }),
+  );
+
+  const p = new OpenaiCompatProvider({
+    id: 'test', base_url: 'https://api.example.com', api_key: 'sk',
+    max_attempts: 3, retry_base_ms: 1,
+  });
+  const out = await p.chat({ model: 'm1', messages: [] });
+  assert.equal(out.text, 'ok');
+});
+
+test('chat() throws ProviderError(category=client) on 422', async () => {
+  setMock(jsonResponse(422, { error: { message: 'invalid messages' } }));
+  const p = new OpenaiCompatProvider({
+    id: 'test', base_url: 'https://api.example.com', api_key: 'sk', max_attempts: 1,
+  });
+  await assert.rejects(
+    () => p.chat({ model: 'm1', messages: [] }),
+    (err) => err.category === 'client' && err.status === 422,
+  );
 });
