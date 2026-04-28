@@ -54,3 +54,30 @@ test('chat() POSTs to /v1/chat/completions and normalizes response', async () =>
   assert.deepEqual(out.usage, { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 });
   assert.ok(out.raw);
 });
+
+test('chat() passes through native tool_calls when present', async () => {
+  setMock(jsonResponse(200, {
+    choices: [{
+      message: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          { id: 'call_1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Istanbul"}' } },
+        ],
+      },
+      finish_reason: 'tool_calls',
+    }],
+    usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
+  }));
+
+  const p = new OpenaiCompatProvider({
+    id: 'test', base_url: 'https://api.example.com', api_key: 'sk-test',
+  });
+  const out = await p.chat({ model: 'm1', messages: [] });
+
+  assert.ok(Array.isArray(out.native_tool_calls));
+  assert.equal(out.native_tool_calls.length, 1);
+  assert.equal(out.native_tool_calls[0].function.name, 'get_weather');
+  assert.equal(out.text, '');
+  assert.equal(out.finish_reason, 'tool_calls');
+});
