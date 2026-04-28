@@ -128,3 +128,30 @@ test('chat() throws ProviderError(category=client) on 422', async () => {
     (err) => err.category === 'client' && err.status === 422,
   );
 });
+
+test('listModels() GETs /v1/models and returns data array', async () => {
+  setMock(jsonResponse(200, {
+    object: 'list',
+    data: [
+      { id: 'gpt-4o', object: 'model', owned_by: 'openai' },
+      { id: 'glm-4.6', object: 'model', owned_by: 'zai' },
+    ],
+  }));
+
+  const p = new OpenaiCompatProvider({
+    id: 'test', base_url: 'https://api.example.com', api_key: 'sk',
+  });
+  const models = await p.listModels();
+  assert.equal(models.length, 2);
+  assert.deepEqual(models.map((m) => m.id), ['gpt-4o', 'glm-4.6']);
+});
+
+test('listModels() returns [] when /v1/models 404s', async () => {
+  setMock(jsonResponse(404, { error: { message: 'not found' } }));
+  const p = new OpenaiCompatProvider({
+    id: 'test', base_url: 'https://api.example.com', api_key: 'sk',
+    max_attempts: 1,
+  });
+  const models = await p.listModels();
+  assert.deepEqual(models, []);
+});
