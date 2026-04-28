@@ -69,7 +69,9 @@ test('maybeMigrateLegacyEnv writes single-provider config from env', () => {
   assert.equal(p.api_key, 'sk-air-test');
   assert.equal(p.enabled, true);
   assert.equal(p.rate_limit.mult_per_min, 15);
-  assert.deepEqual(p.models, []);
+  assert.equal(p.models.length, 1);
+  assert.equal(p.models[0].upstream_id, 'glm-4.6');
+  assert.equal(p.models[0].enabled, true);
 });
 
 test('maybeMigrateLegacyEnv is no-op when providers.json exists', () => {
